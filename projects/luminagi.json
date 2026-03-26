@@ -1,0 +1,40 @@
+{
+    "name": "LuminaGI",
+    "exe_path": "../path/to/your/App_Release_x64.exe",
+    "working_dir": "../path/to/your/Run",
+    "timeout": 180,
+
+    "env_vars": {
+        "AUTOMATED_TESTING": "1"
+    },
+
+    "benchmark": {
+        "enabled": true,
+        "args": ["--benchmark", "600", "--output", "benchmark_results.json"],
+        "result_file": "../path/to/your/Run/benchmark_results.json",
+        "baseline_file": "../baselines/luminagi/benchmark.json",
+        "thresholds": {
+            "avg_fps_pct": 10.0,
+            "p1_fps_pct": 15.0,
+            "p5_fps_pct": 15.0,
+            "min_fps_pct": 20.0
+        }
+    },
+
+    "screenshot": {
+        "enabled": false,
+        "args": ["--screenshot"],
+        "output_dir": "../path/to/your/Run/Screenshots",
+        "reference_dir": "../baselines/luminagi/screenshots",
+        "psnr_threshold": 70.0
+    },
+
+    "shader_compile": {
+        "enabled": true,
+        "dirs": [
+            "../path/to/your/Run/Data/Shaders"
+        ],
+        "compiler": "dxc.exe",
+        "args": ["-HV", "2021"]
+    }
+}
