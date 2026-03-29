@@ -114,7 +114,7 @@ Create a JSON file in `projects/` to define a test target:
 
 ## Engine Integration
 
-For the benchmark test to work, the target application needs a small automation hook. An example implementation for a C++ engine using the global-function pattern:
+For the benchmark test to work, the target application needs a small automation hook. An example implementation for a C++ engine(my IglooEngine) using the global-function pattern:
 
 ```cpp
 // AutomatedTesting.hpp - Engine level, any project can use
