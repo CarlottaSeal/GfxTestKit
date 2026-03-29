@@ -31,24 +31,15 @@ def _save_metrics(data: dict, path: Path):
         json.dump(data, f, indent=2)
 
 
-def run(cfg: ProjectConfig, update_baseline: bool = False) -> TestResult:
-    """
-    Execute the benchmark test.
+BASELINE_RUNS = 3  # Number of runs when establishing baseline; take median
 
-    1. Launch app with benchmark args
-    2. Read result JSON
-    3. Compare against baseline
-    4. Return TestResult with regression info
-    """
-    start = time.time()
+
+def _run_once(cfg: ProjectConfig) -> dict | None:
+    """Launch the app once in benchmark mode, return metrics dict or None on failure."""
     result_path = Path(cfg.benchmark_result_file)
-    baseline_path = Path(cfg.benchmark_baseline_file)
-
-    # Clean previous results
     if result_path.exists():
         result_path.unlink()
 
-    # Launch application
     run_result = launch(
         exe_path=Path(cfg.exe_path),
         args=cfg.benchmark_args,
@@ -57,45 +48,69 @@ def run(cfg: ProjectConfig, update_baseline: bool = False) -> TestResult:
         env=cfg.env_vars or None,
     )
 
-    if run_result.crashed:
+    if run_result.crashed or run_result.timed_out:
+        return None
+
+    return _load_metrics(result_path)
+
+
+def _median_metrics(runs: list[dict]) -> dict:
+    """Given multiple run results, return the one with the median avg_fps."""
+    runs.sort(key=lambda r: r.get("avg_fps", 0))
+    median = runs[len(runs) // 2]
+    return {k: v for k, v in median.items() if k != "per_frame_fps"}
+
+
+def run(cfg: ProjectConfig, update_baseline: bool = False) -> TestResult:
+    """
+    Execute the benchmark test.
+
+    1. Launch app with benchmark args (multiple runs for baseline)
+    2. Read result JSON
+    3. Compare against baseline
+    4. Return TestResult with regression info
+    """
+    start = time.time()
+    result_path = Path(cfg.benchmark_result_file)
+    baseline_path = Path(cfg.benchmark_baseline_file)
+
+    if update_baseline:
+        # Run multiple times, take median to reduce noise
+        print(f"  [Benchmark] Running {BASELINE_RUNS}x for stable baseline...")
+        all_runs = []
+        for i in range(BASELINE_RUNS):
+            print(f"  [Benchmark] Run {i + 1}/{BASELINE_RUNS}")
+            metrics = _run_once(cfg)
+            if metrics is None:
+                return TestResult(
+                    name="benchmark",
+                    status="FAIL",
+                    return_code=RET_CRITICAL,
+                    message=f"Application failed on baseline run {i + 1}",
+                    duration_seconds=time.time() - start,
+                )
+            print(f"  [Benchmark]   avg_fps={metrics.get('avg_fps', 0):.1f}")
+            all_runs.append(metrics)
+
+        baseline_data = _median_metrics(all_runs)
+        _save_metrics(baseline_data, baseline_path)
+        all_avg = [r.get("avg_fps", 0) for r in all_runs]
         return TestResult(
             name="benchmark",
-            status="FAIL",
-            return_code=RET_CRITICAL,
-            message=f"Application crashed: {run_result.crash_reason}",
+            status="PASS",
+            message=f"Baseline saved (median of {BASELINE_RUNS} runs): avg_fps={baseline_data.get('avg_fps', 0):.1f}  [all: {', '.join(f'{a:.1f}' for a in all_avg)}]",
+            details=baseline_data,
             duration_seconds=time.time() - start,
         )
 
-    if run_result.timed_out:
-        return TestResult(
-            name="benchmark",
-            status="FAIL",
-            return_code=RET_CRITICAL,
-            message=f"Application timed out after {cfg.timeout}s",
-            duration_seconds=time.time() - start,
-        )
-
-    # Read results
-    metrics = _load_metrics(result_path)
+    # Single run for comparison
+    metrics = _run_once(cfg)
     if metrics is None:
         return TestResult(
             name="benchmark",
             status="FAIL",
             return_code=RET_CRITICAL,
-            message=f"Result file not found: {result_path}",
-            duration_seconds=time.time() - start,
-        )
-
-    # Update baseline mode
-    if update_baseline:
-        # Strip per-frame data for cleaner baseline
-        baseline_data = {k: v for k, v in metrics.items() if k != "per_frame_fps"}
-        _save_metrics(baseline_data, baseline_path)
-        return TestResult(
-            name="benchmark",
-            status="PASS",
-            message=f"Baseline saved: avg_fps={metrics.get('avg_fps', 0):.1f}",
-            details=metrics,
+            message="Application crashed or timed out",
             duration_seconds=time.time() - start,
         )
 
