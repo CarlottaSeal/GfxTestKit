@@ -1,8 +1,8 @@
 # GfxTestKit
 
-Test automation for graphics applications — benchmark regression, screenshot diff, shader compilation checks.
+Test automation for graphics applications： benchmark regression, screenshot diff, shader compilation checks.
 
-Built for my DX12 rendering engine — needed a way to catch performance regressions and shader breakage automatically after code changes. Designed to work with any graphics application through a JSON project config.
+Built for my DX12 rendering engine: my Igloo Engine needed a way to catch performance regressions and shader breakage automatically after code changes. Designed to work with any graphics application through a JSON project config.
 
 ## Quick Start
 
