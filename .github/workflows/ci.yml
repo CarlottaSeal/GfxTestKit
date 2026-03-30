@@ -18,7 +18,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install scikit-image numpy
+        run: pip install -r requirements.txt
 
       - name: Check syntax (all .py files compile)
         run: python -m py_compile gfx_test.py && find core tests -name "*.py" -exec python -m py_compile {} +
