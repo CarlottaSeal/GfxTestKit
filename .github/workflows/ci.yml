@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Cloud runner: validate Python code (no GPU needed)
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install scikit-image numpy
+
+      - name: Check syntax (all .py files compile)
+        run: python -m py_compile gfx_test.py && find core tests -name "*.py" -exec python -m py_compile {} +
+
+      - name: Run unit tests
+        run: python -m pytest tests/unit/ -v --tb=short
+
+  # Self-hosted GPU runner: full integration tests
+  # Uncomment and configure a self-hosted runner to enable
+  # gpu-tests:
+  #   runs-on: [self-hosted, windows, gpu]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Run full test suite
+  #       run: python gfx_test.py --project projects/luminagi.local.json --report results.json
+  #     - name: Upload report
+  #       uses: actions/upload-artifact@v4
+  #       if: always()
+  #       with:
+  #         name: test-report
+  #         path: results.json
