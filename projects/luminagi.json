@@ -8,11 +8,20 @@
         "AUTOMATED_TESTING": "1"
     },
 
+    "build": {
+        "enabled": false,
+        "solution": "../path/to/your/Project.sln",
+        "configuration": "Release",
+        "platform": "x64",
+        "timeout": 300
+    },
+
     "benchmark": {
         "enabled": true,
         "args": ["--benchmark", "600", "--output", "benchmark_results.json"],
         "result_file": "../path/to/your/Run/benchmark_results.json",
         "baseline_file": "../baselines/luminagi/benchmark.json",
+        "warmup_frames": 60,
         "thresholds": {
             "avg_fps_pct": 10.0,
             "p1_fps_pct": 15.0,
@@ -36,5 +45,11 @@
         ],
         "compiler": "dxc.exe",
         "args": ["-HV", "2021"]
+    },
+
+    "memleak": {
+        "enabled": false,
+        "args": ["--benchmark", "120"],
+        "file": ""
     }
 }

@@ -28,7 +28,7 @@ if str(TOOL_DIR) not in sys.path:
 
 from core.config import load_config
 from core.report import Report
-from tests import benchmark_test, screenshot_test, shader_compile_test
+from tests import build_test, benchmark_test, screenshot_test, shader_compile_test, memleak_test
 
 
 def main():
@@ -46,7 +46,7 @@ def main():
     )
     parser.add_argument(
         "--test", type=str, default=None,
-        help="Run only a specific test: benchmark, screenshot, shader_compile",
+        help="Run only a specific test: build, benchmark, screenshot, shader_compile, memleak",
     )
     parser.add_argument(
         "--report", type=str, default=None,
@@ -66,29 +66,59 @@ def main():
 
     report = Report(cfg.name)
     run_filter = args.test
+    step = 0
+    total = sum([cfg.build_enabled, cfg.benchmark_enabled, cfg.screenshot_enabled,
+                 cfg.shader_compile_enabled, cfg.memleak_enabled])
+
+    # --- Build (always first) ---
+    if cfg.build_enabled and (run_filter is None or run_filter == "build"):
+        step += 1
+        print(f"\n{'='*60}")
+        print(f"  [{step}/{total}] Build")
+        print(f"{'='*60}")
+        result = build_test.run(cfg)
+        report.add(result)
+        if result.return_code >= 0xFF and run_filter is None:
+            print("  [GfxTestKit] Build failed — skipping remaining tests")
+            report.print_summary()
+            if args.report:
+                report.save_json(Path(args.report))
+            sys.exit(report.worst_code)
 
     # --- Benchmark ---
     if cfg.benchmark_enabled and (run_filter is None or run_filter == "benchmark"):
+        step += 1
         print(f"\n{'='*60}")
-        print(f"  [1/3] Benchmark Test")
+        print(f"  [{step}/{total}] Benchmark Test")
         print(f"{'='*60}")
         result = benchmark_test.run(cfg, update_baseline=args.update_baseline)
         report.add(result)
 
     # --- Screenshot ---
     if cfg.screenshot_enabled and (run_filter is None or run_filter == "screenshot"):
+        step += 1
         print(f"\n{'='*60}")
-        print(f"  [2/3] Screenshot Regression Test")
+        print(f"  [{step}/{total}] Screenshot Regression Test")
         print(f"{'='*60}")
         result = screenshot_test.run(cfg, update_baseline=args.update_baseline)
         report.add(result)
 
     # --- Shader Compile ---
     if cfg.shader_compile_enabled and (run_filter is None or run_filter == "shader_compile"):
+        step += 1
         print(f"\n{'='*60}")
-        print(f"  [3/3] Shader Compilation Test")
+        print(f"  [{step}/{total}] Shader Compilation Test")
         print(f"{'='*60}")
         result = shader_compile_test.run(cfg, update_baseline=args.update_baseline)
+        report.add(result)
+
+    # --- Memory Leak ---
+    if cfg.memleak_enabled and (run_filter is None or run_filter == "memleak"):
+        step += 1
+        print(f"\n{'='*60}")
+        print(f"  [{step}/{total}] Memory Leak Detection")
+        print(f"{'='*60}")
+        result = memleak_test.run(cfg)
         report.add(result)
 
     # --- Report ---

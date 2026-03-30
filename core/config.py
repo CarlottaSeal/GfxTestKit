@@ -40,6 +40,19 @@ class ProjectConfig:
     shader_compiler: str = "dxc.exe"
     shader_args: list[str] = field(default_factory=list)
 
+    # Build settings
+    build_enabled: bool = False
+    build_solution: str = ""
+    build_configuration: str = "Release"
+    build_platform: str = "x64"
+    build_msbuild_path: str = ""
+    build_timeout: int = 300
+
+    # Memory leak detection settings
+    memleak_enabled: bool = False
+    memleak_args: list[str] = field(default_factory=list)
+    memleak_file: str = ""  # path to .memleaks file (optional)
+
     # Extra environment variables to inject (like The-Forge's AUTOMATED_TESTING)
     env_vars: dict[str, str] = field(default_factory=dict)
 
@@ -60,6 +73,8 @@ class ProjectConfig:
         self.screenshot_output_dir = resolve(self.screenshot_output_dir)
         self.screenshot_reference_dir = resolve(self.screenshot_reference_dir)
         self.shader_dirs = [resolve(d) for d in self.shader_dirs]
+        self.build_solution = resolve(self.build_solution)
+        self.memleak_file = resolve(self.memleak_file) if self.memleak_file else ""
 
 
 def load_config(config_path: str | Path) -> ProjectConfig:
@@ -104,6 +119,21 @@ def load_config(config_path: str | Path) -> ProjectConfig:
         cfg.shader_dirs = sc.get("dirs", [])
         cfg.shader_compiler = sc.get("compiler", "dxc.exe")
         cfg.shader_args = sc.get("args", [])
+
+    build = raw.get("build", {})
+    if build:
+        cfg.build_enabled = build.get("enabled", False)
+        cfg.build_solution = build.get("solution", "")
+        cfg.build_configuration = build.get("configuration", "Release")
+        cfg.build_platform = build.get("platform", "x64")
+        cfg.build_msbuild_path = build.get("msbuild_path", "")
+        cfg.build_timeout = build.get("timeout", 300)
+
+    ml = raw.get("memleak", {})
+    if ml:
+        cfg.memleak_enabled = ml.get("enabled", False)
+        cfg.memleak_args = ml.get("args", [])
+        cfg.memleak_file = ml.get("file", "")
 
     cfg.resolve_paths(config_path.parent)
     return cfg
