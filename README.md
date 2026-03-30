@@ -22,6 +22,7 @@ python gfx_test.py --project projects/luminagi.json --test build
 python gfx_test.py --project projects/luminagi.json --test benchmark
 python gfx_test.py --project projects/luminagi.json --test shader_compile
 python gfx_test.py --project projects/luminagi.json --test memleak
+python gfx_test.py --project projects/luminagi.json --test sanitizer
 ```
 
 ## Architecture
@@ -46,7 +47,8 @@ tests/
   screenshot_test.py         PSNR/SSIM image regression
   shader_compile_test.py     HLSL compilation via dxc with auto entry detection
   memleak_test.py            Memory leak detection (.memleaks + CRT output)
-  unit/                      22 pytest unit tests for the tool itself
+  sanitizer_test.py          ASAN/UBSAN error parsing
+  unit/                      29 pytest unit tests for the tool itself
 projects/
   luminagi.json              example project config
 .github/workflows/ci.yml     GitHub Actions: lint + pytest on every push
@@ -71,6 +73,8 @@ Benchmark results use the median of 3 runs for both baseline and comparison, whi
 Build failure automatically skips all downstream tests — no point benchmarking broken code.
 
 Memory leak detection parses both `.memleaks` files (The-Forge convention) and MSVC CRT debug output (`_CrtDumpMemoryLeaks`). Any leak is a critical failure.
+
+Sanitizer support parses stdout/stderr for AddressSanitizer (heap-buffer-overflow, use-after-free, double-free) and UndefinedBehaviorSanitizer (integer overflow, null pointer, misaligned access) error patterns. Requires a separate instrumented build; the tool automatically sets `ASAN_OPTIONS` and `UBSAN_OPTIONS` env vars.
 
 Target apps integrate through 4 global functions (`Startup` / `EndFrame` / `ShouldQuit` / `Shutdown`) — same pattern as a typical engine debug render system. No base class, no framework dependency.
 
@@ -101,6 +105,13 @@ Detects memory leaks through two channels:
 - Parses `.memleaks` files (count + details)
 - Scans stdout/stderr for MSVC CRT leak reports
 - Any leak = critical failure (0xFF)
+
+### Sanitizer (ASAN/UBSAN)
+Runs an instrumented build and parses output for sanitizer errors:
+- AddressSanitizer: buffer overflow, use-after-free, double-free, leak detection
+- UndefinedBehaviorSanitizer: integer overflow, null pointer, misaligned access
+- Automatically sets `ASAN_OPTIONS` and `UBSAN_OPTIONS` for detailed stack traces
+- Requires a separate build with `/fsanitize=address` (MSVC) or `-fsanitize=address,undefined` (clang-cl)
 
 ## Project Configuration
 
@@ -135,6 +146,12 @@ Create a JSON file in `projects/` to define a test target:
         "enabled": false,
         "args": ["--benchmark", "120"],
         "file": ""
+    },
+    "sanitizer": {
+        "enabled": false,
+        "exe_path": "../path/to/MyApp_ASAN.exe",
+        "type": "asan",
+        "args": ["--benchmark", "120"]
     }
 }
 ```
@@ -161,7 +178,7 @@ AutomatedTestingShutdown();                                // at shutdown
 
 GitHub Actions runs on every push:
 - Python syntax validation across all `.py` files
-- 22 unit tests via pytest (config loading, report grading, leak parsing, shader detection)
+- 29 unit tests via pytest (config, report, leak parsing, shader detection, sanitizer parsing)
 
 Full GPU integration tests are documented for self-hosted runners with GPU hardware.
 
