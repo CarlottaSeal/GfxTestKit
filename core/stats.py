@@ -1,12 +1,8 @@
 """
 stats.py - Statistical analysis for performance time series.
 
-Provides outlier detection, trend analysis, and changepoint detection
-for tracking performance metrics across CI runs. Uses only Python stdlib
-(math, statistics) — no numpy/scipy required.
-
-Designed for the "generate statistics, identify outliers, investigate trends"
-workflow described in graphics compiler CI pipelines.
+Outlier detection, trend analysis, and changepoint detection for
+tracking performance metrics across CI runs. stdlib only (no numpy).
 """
 
 from dataclasses import dataclass, field
@@ -14,7 +10,6 @@ from math import sqrt
 from statistics import mean, median, stdev, quantiles
 
 
-# ─── Data models ─────────────────────────────────────
 
 @dataclass(frozen=True)
 class SummaryStats:
@@ -66,10 +61,9 @@ class SeriesAnalysis:
     changepoints: list[Changepoint]
 
 
-# ─── Descriptive statistics ──────────────────────────
 
 def compute_summary(data: list[float]) -> SummaryStats:
-    """Compute descriptive statistics for a numeric series."""
+    """Descriptive statistics for a numeric series."""
     n = len(data)
     if n == 0:
         return SummaryStats(0, 0, 0, 0, 0, 0, 0, 0, 0)
@@ -103,12 +97,11 @@ def compute_summary(data: list[float]) -> SummaryStats:
     )
 
 
-# ─── Outlier detection ──────────────────────────────
 
 def detect_outliers_zscore(
     data: list[float], threshold: float = 2.0
 ) -> OutlierResult:
-    """Z-score method: flag points > threshold standard deviations from mean."""
+    """Flag points beyond `threshold` standard deviations from mean."""
     if len(data) < 3:
         return OutlierResult([], [], "zscore", threshold)
 
@@ -129,7 +122,7 @@ def detect_outliers_zscore(
 def detect_outliers_iqr(
     data: list[float], factor: float = 1.5
 ) -> OutlierResult:
-    """IQR method: more robust to skewed distributions than Z-score."""
+    """IQR fences method. More robust to skew than Z-score."""
     if len(data) < 4:
         return OutlierResult([], [], "iqr", factor)
 
@@ -148,18 +141,16 @@ def detect_outliers_iqr(
     return OutlierResult(indices, values, "iqr", factor)
 
 
-# ─── Trend analysis ─────────────────────────────────
 
 def detect_trend(
     data: list[float], recent_window: int = 5
 ) -> TrendResult:
-    """Linear regression slope + recent-vs-overall comparison."""
+    """OLS slope + recent window vs overall mean."""
     n = len(data)
     if n < 3:
         m = mean(data) if data else 0
         return TrendResult("stable", 0.0, 0.0, m, m, 0.0)
 
-    # OLS linear regression
     x_mean = (n - 1) / 2.0
     y_mean = mean(data)
 
@@ -169,12 +160,10 @@ def detect_trend(
     slope = ss_xy / ss_xx if ss_xx != 0 else 0
     intercept = y_mean - slope * x_mean
 
-    # R-squared
     ss_res = sum((v - (slope * i + intercept)) ** 2 for i, v in enumerate(data))
     ss_tot = sum((v - y_mean) ** 2 for v in data)
     r_sq = max(0, 1 - ss_res / ss_tot) if ss_tot != 0 else 0
 
-    # Recent window vs overall
     recent = data[-min(recent_window, n) :]
     recent_m = mean(recent)
     change = ((recent_m - y_mean) / abs(y_mean) * 100) if y_mean != 0 else 0
@@ -196,12 +185,11 @@ def detect_trend(
     )
 
 
-# ─── Changepoint detection ──────────────────────────
 
 def detect_changepoints(
     data: list[float], window: int = 5, threshold: float = 2.0
 ) -> list[Changepoint]:
-    """Sliding-window Welch's t-test to find sudden shifts in the series."""
+    """Sliding-window Welch's t-test for sudden shifts."""
     n = len(data)
     if n < 2 * window:
         return []
@@ -232,7 +220,7 @@ def detect_changepoints(
                 )
             )
 
-    # Merge nearby detections — keep the most significant per cluster
+    # Keep most significant detection per cluster
     if not candidates:
         return []
 
@@ -247,17 +235,16 @@ def detect_changepoints(
     return merged
 
 
-# ─── Moving averages ────────────────────────────────
 
 def moving_average(data: list[float], window: int) -> list[float]:
-    """Simple moving average. Returns list of length len(data) - window + 1."""
+    """Simple moving average."""
     if len(data) < window or window < 1:
         return []
     return [mean(data[i : i + window]) for i in range(len(data) - window + 1)]
 
 
 def exponential_moving_average(data: list[float], alpha: float = 0.3) -> list[float]:
-    """Exponential moving average. alpha=0 ignores new data, alpha=1 ignores history."""
+    """EMA. alpha in [0,1]: higher = more weight on recent."""
     if not data:
         return []
     result = [data[0]]
@@ -266,7 +253,6 @@ def exponential_moving_average(data: list[float], alpha: float = 0.3) -> list[fl
     return [round(v, 2) for v in result]
 
 
-# ─── Top-level analysis ─────────────────────────────
 
 def analyze_series(
     data: list[float],
@@ -278,10 +264,10 @@ def analyze_series(
     changepoint_window: int = 5,
     changepoint_threshold: float = 2.0,
 ) -> SeriesAnalysis:
-    """Run full statistical analysis on a performance time series."""
+    """Run all analyses on a time series and bundle the results."""
     trend = detect_trend(data, trend_window)
 
-    # Adjust direction label based on whether higher is better
+    # Flip direction for metrics where lower is better (e.g. compile time)
     if not higher_is_better and trend.direction != "stable":
         flipped = "improving" if trend.direction == "degrading" else "degrading"
         trend = TrendResult(
@@ -304,7 +290,7 @@ def analyze_series(
 
 
 def format_analysis(analysis: SeriesAnalysis) -> str:
-    """Format analysis results for console output."""
+    """One-line-per-finding console summary."""
     lines = [f"  [{analysis.metric}] {analysis.summary.count} data points"]
     s = analysis.summary
     lines.append(
