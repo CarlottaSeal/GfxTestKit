@@ -48,7 +48,9 @@ tests/
   shader_compile_test.py     HLSL compilation via dxc with auto entry detection
   memleak_test.py            Memory leak detection (.memleaks + CRT output)
   sanitizer_test.py          ASAN/UBSAN error parsing
-  unit/                      29 pytest unit tests for the tool itself
+  unit/                      64 pytest unit tests for the tool itself
+core/
+  stats.py                   statistical analysis (outlier, trend, changepoint)
 projects/
   luminagi.json              example project config
 .github/workflows/ci.yml     GitHub Actions: lint + pytest on every push
@@ -85,6 +87,14 @@ Compiles the project via MSBuild (auto-located through vswhere). Parses error/wa
 
 ### Benchmark
 Launches the application with `--benchmark <frames>`, collects FPS metrics JSON, and compares against a stored baseline. Both baseline and comparison use the median of 3 runs. Configurable per-metric percentage thresholds (avg, p1, p5, min) detect regressions.
+
+Each run is automatically appended to a history file. Once 5+ runs exist, statistical trend analysis runs after every benchmark:
+- **Outlier detection**: Z-score and IQR methods flag abnormal runs
+- **Trend analysis**: OLS linear regression detects gradual degradation that single-baseline comparisons miss
+- **Changepoint detection**: sliding-window Welch's t-test identifies sudden performance shifts
+- **Smoothing**: simple and exponential moving averages for noisy data
+
+All statistics use Python stdlib only (no numpy/scipy dependency).
 
 ### Screenshot Regression
 Compares rendered screenshots against reference images using scikit-image:
@@ -178,7 +188,7 @@ AutomatedTestingShutdown();                                // at shutdown
 
 GitHub Actions runs on every push:
 - Python syntax validation across all `.py` files
-- 29 unit tests via pytest (config, report, leak parsing, shader detection, sanitizer parsing)
+- 64 unit tests via pytest (config, report, leak parsing, shader detection, sanitizer parsing, statistical analysis)
 
 Full GPU integration tests are documented for self-hosted runners with GPU hardware.
 

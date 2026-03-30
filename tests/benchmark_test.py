@@ -10,12 +10,14 @@ Inspired by The-Forge's FSL analysis baseline comparison system.
 
 import json
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from core import RET_SUCCESS, RET_WARNING, RET_CRITICAL
 from core.config import ProjectConfig
 from core.runner import launch, RunResult
 from core.report import TestResult
+from core.stats import analyze_series, format_analysis
 
 
 def _load_metrics(path: Path) -> dict | None:
@@ -32,6 +34,58 @@ def _save_metrics(data: dict, path: Path):
 
 
 BASELINE_RUNS = 3  # Number of runs when establishing baseline; take median
+HISTORY_MAX_ENTRIES = 200
+
+
+def _history_path(baseline_path: Path) -> Path:
+    return baseline_path.with_name(baseline_path.stem + "_history.json")
+
+
+def _append_history(baseline_path: Path, metrics: dict):
+    """Append a run to the history file for trend analysis."""
+    path = _history_path(baseline_path)
+    history = []
+    if path.exists():
+        try:
+            history = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            history = []
+
+    entry = {"timestamp": datetime.now(timezone.utc).isoformat()}
+    for k in ("avg_fps", "min_fps", "p1_fps", "p5_fps", "median_fps", "max_fps"):
+        if k in metrics:
+            entry[k] = metrics[k]
+
+    history.append(entry)
+    if len(history) > HISTORY_MAX_ENTRIES:
+        history = history[-HISTORY_MAX_ENTRIES:]
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(history, indent=2))
+    return history
+
+
+def _run_history_analysis(baseline_path: Path):
+    """Run statistical analysis on accumulated history and print results."""
+    path = _history_path(baseline_path)
+    if not path.exists():
+        return
+
+    try:
+        history = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return
+
+    if len(history) < 5:
+        return
+
+    print(f"\n  [Benchmark] Performance trend analysis ({len(history)} runs):")
+    for metric in ("avg_fps", "min_fps", "p1_fps"):
+        values = [e[metric] for e in history if metric in e]
+        if len(values) < 5:
+            continue
+        analysis = analyze_series(values, metric=metric, higher_is_better=True)
+        print(format_analysis(analysis))
 
 
 def _run_once(cfg: ProjectConfig) -> dict | None:
@@ -182,6 +236,10 @@ def run(cfg: ProjectConfig, update_baseline: bool = False) -> TestResult:
             "delta_pct": round(delta_pct, 2), "status": status,
         }
         print(f"  {metric_name:>10}  {cur:10.1f}  {base:10.1f}  {delta_pct:+9.1f}%  {status}")
+
+    # Log to history and run trend analysis
+    _append_history(baseline_path, metrics)
+    _run_history_analysis(baseline_path)
 
     # Build result
     if ret_code == RET_SUCCESS:
