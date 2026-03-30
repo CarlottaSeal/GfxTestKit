@@ -40,6 +40,12 @@ class ProjectConfig:
     shader_compiler: str = "dxc.exe"
     shader_args: list[str] = field(default_factory=list)
 
+    # Sanitizer settings
+    sanitizer_enabled: bool = False
+    sanitizer_exe: str = ""         # path to sanitizer-instrumented build
+    sanitizer_type: str = "asan"    # asan, ubsan, or both
+    sanitizer_args: list[str] = field(default_factory=list)
+
     # Build settings
     build_enabled: bool = False
     build_solution: str = ""
@@ -75,6 +81,7 @@ class ProjectConfig:
         self.shader_dirs = [resolve(d) for d in self.shader_dirs]
         self.build_solution = resolve(self.build_solution)
         self.memleak_file = resolve(self.memleak_file) if self.memleak_file else ""
+        self.sanitizer_exe = resolve(self.sanitizer_exe) if self.sanitizer_exe else ""
 
 
 def load_config(config_path: str | Path) -> ProjectConfig:
@@ -128,6 +135,13 @@ def load_config(config_path: str | Path) -> ProjectConfig:
         cfg.build_platform = build.get("platform", "x64")
         cfg.build_msbuild_path = build.get("msbuild_path", "")
         cfg.build_timeout = build.get("timeout", 300)
+
+    san = raw.get("sanitizer", {})
+    if san:
+        cfg.sanitizer_enabled = san.get("enabled", False)
+        cfg.sanitizer_exe = san.get("exe_path", "")
+        cfg.sanitizer_type = san.get("type", "asan")
+        cfg.sanitizer_args = san.get("args", [])
 
     ml = raw.get("memleak", {})
     if ml:

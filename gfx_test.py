@@ -28,7 +28,7 @@ if str(TOOL_DIR) not in sys.path:
 
 from core.config import load_config
 from core.report import Report
-from tests import build_test, benchmark_test, screenshot_test, shader_compile_test, memleak_test
+from tests import build_test, benchmark_test, screenshot_test, shader_compile_test, memleak_test, sanitizer_test
 
 
 def main():
@@ -46,7 +46,7 @@ def main():
     )
     parser.add_argument(
         "--test", type=str, default=None,
-        help="Run only a specific test: build, benchmark, screenshot, shader_compile, memleak",
+        help="Run only a specific test: build, benchmark, screenshot, shader_compile, memleak, sanitizer",
     )
     parser.add_argument(
         "--report", type=str, default=None,
@@ -68,7 +68,7 @@ def main():
     run_filter = args.test
     step = 0
     total = sum([cfg.build_enabled, cfg.benchmark_enabled, cfg.screenshot_enabled,
-                 cfg.shader_compile_enabled, cfg.memleak_enabled])
+                 cfg.shader_compile_enabled, cfg.memleak_enabled, cfg.sanitizer_enabled])
 
     # --- Build (always first) ---
     if cfg.build_enabled and (run_filter is None or run_filter == "build"):
@@ -119,6 +119,15 @@ def main():
         print(f"  [{step}/{total}] Memory Leak Detection")
         print(f"{'='*60}")
         result = memleak_test.run(cfg)
+        report.add(result)
+
+    # --- Sanitizer ---
+    if cfg.sanitizer_enabled and (run_filter is None or run_filter == "sanitizer"):
+        step += 1
+        print(f"\n{'='*60}")
+        print(f"  [{step}/{total}] Sanitizer ({cfg.sanitizer_type.upper()})")
+        print(f"{'='*60}")
+        result = sanitizer_test.run(cfg)
         report.add(result)
 
     # --- Report ---
