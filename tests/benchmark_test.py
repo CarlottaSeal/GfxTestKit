@@ -40,9 +40,14 @@ def _run_once(cfg: ProjectConfig) -> dict | None:
     if result_path.exists():
         result_path.unlink()
 
+    # Inject --warmup if configured and not already in args
+    args = list(cfg.benchmark_args)
+    if "--warmup" not in args and cfg.benchmark_warmup_frames != 60:
+        args.extend(["--warmup", str(cfg.benchmark_warmup_frames)])
+
     run_result = launch(
         exe_path=Path(cfg.exe_path),
-        args=cfg.benchmark_args,
+        args=args,
         working_dir=Path(cfg.working_dir) if cfg.working_dir else None,
         timeout=cfg.timeout,
         env=cfg.env_vars or None,
@@ -103,16 +108,24 @@ def run(cfg: ProjectConfig, update_baseline: bool = False) -> TestResult:
             duration_seconds=time.time() - start,
         )
 
-    # Single run for comparison
-    metrics = _run_once(cfg)
-    if metrics is None:
-        return TestResult(
-            name="benchmark",
-            status="FAIL",
-            return_code=RET_CRITICAL,
-            message="Application crashed or timed out",
-            duration_seconds=time.time() - start,
-        )
+    # Multiple runs for comparison too (same stability as baseline)
+    COMPARE_RUNS = 3
+    print(f"  [Benchmark] Running {COMPARE_RUNS}x for stable comparison...")
+    all_runs = []
+    for i in range(COMPARE_RUNS):
+        print(f"  [Benchmark] Run {i + 1}/{COMPARE_RUNS}")
+        m = _run_once(cfg)
+        if m is None:
+            return TestResult(
+                name="benchmark",
+                status="FAIL",
+                return_code=RET_CRITICAL,
+                message=f"Application failed on comparison run {i + 1}",
+                duration_seconds=time.time() - start,
+            )
+        print(f"  [Benchmark]   avg_fps={m.get('avg_fps', 0):.1f}")
+        all_runs.append(m)
+    metrics = _median_metrics(all_runs)
 
     # Load baseline
     baseline = _load_metrics(baseline_path)

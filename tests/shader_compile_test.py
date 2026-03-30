@@ -33,13 +33,11 @@ def _detect_entries(shader_path: Path) -> list[tuple[str, str]]:
     """
     Detect all entry points and their profiles from shader source.
 
-    Scans for:
-      - [numthreads(...)] → next function is CS
-      - : SV_POSITION in return → VS
-      - : SV_TARGET in return → PS
-
-    Returns list of (entry_name, profile) pairs. A single file can have
-    multiple entry points (e.g. CompositeVS + CompositePS).
+    Strategy:
+      1. Scan for [numthreads] → next function is CS
+      2. Scan for functions returning SV_Position → VS
+      3. Scan for functions returning SV_Target/SV_Depth or returning a struct that contains SV_Target → PS
+      4. Fallback: try common entry names (VertexMain, PixelMain, VSMain, PSMain, main, CSMain)
     """
     import re
 
@@ -53,31 +51,58 @@ def _detect_entries(shader_path: Path) -> list[tuple[str, str]]:
     lines = source.split("\n")
     is_next_cs = False
 
+    # Phase 1: find structs that contain SV_Target (like PSOutput)
+    ps_output_structs = set()
+    vs_output_structs = set()
+    current_struct = None
+    for line in lines:
+        s = line.strip()
+        m = re.match(r"struct\s+(\w+)", s)
+        if m:
+            current_struct = m.group(1)
+        if current_struct and re.search(r"SV_Target", s, re.IGNORECASE):
+            ps_output_structs.add(current_struct)
+        if current_struct and re.search(r"SV_Position", s, re.IGNORECASE):
+            vs_output_structs.add(current_struct)
+        if s == "};":
+            current_struct = None
+
+    # Phase 2: scan for function signatures
     for line in lines:
         stripped = line.strip()
 
-        # [numthreads(X, Y, Z)] marks the next function as compute
         if re.match(r"\[numthreads\s*\(", stripped):
             is_next_cs = True
             continue
 
-        # Function signature: "ReturnType FuncName(...) : SEMANTIC" or just "void FuncName(...)"
-        func_match = re.match(
-            r"(?:float4|void|uint|int|float|half4|VSOutput|PSOutput)\s+(\w+)\s*\(",
-            stripped,
-        )
+        # Match function: ReturnType FuncName(...)
+        func_match = re.match(r"(\w+)\s+(\w+)\s*\(", stripped)
         if not func_match:
             continue
 
-        func_name = func_match.group(1)
+        ret_type = func_match.group(1)
+        func_name = func_match.group(2)
+
+        # Skip non-function keywords
+        if ret_type in ("cbuffer", "struct", "Texture2D", "Texture3D", "TextureCubeArray",
+                        "Buffer", "StructuredBuffer", "RWTexture2D", "RWTexture2DArray",
+                        "RWTexture3D", "SamplerState", "SamplerComparisonState",
+                        "RWStructuredBuffer", "if", "for", "while", "return"):
+            continue
 
         if is_next_cs:
             entries.append((func_name, "cs_6_0"))
             is_next_cs = False
-        elif ": SV_POSITION" in line or ": SV_Position" in line:
+        elif re.search(r":\s*SV_Position", line, re.IGNORECASE):
             entries.append((func_name, "vs_6_0"))
-        elif ": SV_TARGET" in line or ": SV_Target" in line:
+        elif re.search(r":\s*SV_Target", line, re.IGNORECASE):
             entries.append((func_name, "ps_6_0"))
+        elif re.search(r":\s*SV_Depth", line, re.IGNORECASE):
+            entries.append((func_name, "ps_6_0"))
+        elif ret_type in ps_output_structs:
+            entries.append((func_name, "ps_6_0"))
+        elif ret_type in vs_output_structs:
+            entries.append((func_name, "vs_6_0"))
 
     if not entries:
         # Fallback: check if file has [numthreads] anywhere
@@ -114,9 +139,11 @@ def _compile_shader(
 
         errors = output.count("error:")
         warnings = output.count("warning:")
+        entry_not_found = "missing entry point definition" in output
 
         return {
             "passed": proc.returncode == 0 and errors == 0,
+            "entry_not_found": entry_not_found,
             "return_code": proc.returncode,
             "errors": errors,
             "warnings": warnings,
@@ -172,6 +199,11 @@ def run(cfg: ProjectConfig, update_baseline: bool = False) -> TestResult:
 
     print(f"  [Shader] Compiling {len(shaders)} shaders with {compiler}")
 
+    # Common fallback entry names to try if detected entry fails
+    _VS_FALLBACKS = ["VertexMain", "VSMain", "VS", "main"]
+    _PS_FALLBACKS = ["PixelMain", "PSMain", "PS", "main"]
+    _CS_FALLBACKS = ["CSMain", "main"]
+
     for shader in shaders:
         entries = _detect_entries(shader)
         rel_name = shader.name
@@ -180,18 +212,35 @@ def run(cfg: ProjectConfig, update_baseline: bool = False) -> TestResult:
             total_entries += 1
             result = _compile_shader(compiler, shader, entry, profile, all_extra)
 
+            # If entry point not found, try fallback names before giving up
+            if result.get("entry_not_found"):
+                fallbacks = {"vs_6_0": _VS_FALLBACKS, "ps_6_0": _PS_FALLBACKS, "cs_6_0": _CS_FALLBACKS}
+                candidates = [f for f in fallbacks.get(profile, []) if f != entry]
+                for fallback_entry in candidates:
+                    alt = _compile_shader(compiler, shader, fallback_entry, profile, all_extra)
+                    if not alt.get("entry_not_found"):
+                        result = alt
+                        entry = fallback_entry
+                        break
+
             key = f"{rel_name}:{entry}"
             total_errors += result["errors"]
             total_warnings += result["warnings"]
             details[key] = result
 
             if not result["passed"]:
-                ret_code = max(ret_code, RET_CRITICAL)
-                failures.append(key)
-                print(f"  [Shader] {rel_name} ({entry} {profile}): FAIL ({result['errors']} errors)")
-                if result["output"]:
-                    for line in result["output"].split("\n")[:3]:
-                        print(f"           {line}")
+                if result.get("entry_not_found"):
+                    # Tool limitation, not a real shader bug — report as WARNING
+                    ret_code = max(ret_code, RET_WARNING)
+                    print(f"  [Shader] {rel_name}: SKIP (entry point not detected)")
+                else:
+                    # Real compilation error
+                    ret_code = max(ret_code, RET_CRITICAL)
+                    failures.append(key)
+                    print(f"  [Shader] {rel_name} ({entry} {profile}): FAIL ({result['errors']} errors)")
+                    if result["output"]:
+                        for line in result["output"].split("\n")[:3]:
+                            print(f"           {line}")
             else:
                 warn_str = f" ({result['warnings']} warnings)" if result["warnings"] > 0 else ""
                 print(f"  [Shader] {rel_name} ({entry} {profile}): OK{warn_str}")

@@ -24,6 +24,7 @@ class ProjectConfig:
     benchmark_args: list[str] = field(default_factory=list)
     benchmark_result_file: str = ""
     benchmark_baseline_file: str = ""
+    benchmark_warmup_frames: int = 60
     benchmark_thresholds: dict[str, float] = field(default_factory=dict)
 
     # Screenshot test settings
@@ -83,6 +84,7 @@ def load_config(config_path: str | Path) -> ProjectConfig:
         cfg.benchmark_args = bench.get("args", [])
         cfg.benchmark_result_file = bench.get("result_file", "")
         cfg.benchmark_baseline_file = bench.get("baseline_file", "")
+        cfg.benchmark_warmup_frames = bench.get("warmup_frames", 60)
         cfg.benchmark_thresholds = bench.get("thresholds", {
             "avg_fps_pct": 10.0,
             "p1_fps_pct": 15.0,
