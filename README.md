@@ -41,6 +41,7 @@ core/
   runner.py                  subprocess launch, timeout, crash code detection
   config.py                  JSON project config loading
   report.py                  result aggregation, console + JSON output
+  stats.py                   statistical analysis (outlier, trend, changepoint)
 tests/
   build_test.py              MSBuild automation (locates via vswhere)
   benchmark_test.py          FPS baseline comparison (median of 3 runs)
@@ -49,12 +50,65 @@ tests/
   memleak_test.py            Memory leak detection (.memleaks + CRT output)
   sanitizer_test.py          ASAN/UBSAN error parsing
   unit/                      64 pytest unit tests for the tool itself
-core/
-  stats.py                   statistical analysis (outlier, trend, changepoint)
 projects/
   luminagi.json              example project config
 .github/workflows/ci.yml     GitHub Actions: lint + pytest on every push
 ```
+
+### gfx_test.py — Entry point
+
+Parses CLI arguments (`--project`, `--test`, `--update-baseline`, `--report`), loads the config, then runs each enabled test module in a fixed order: build → benchmark → screenshot → shader\_compile → memleak → sanitizer. If build fails, the remaining tests are skipped immediately — no point benchmarking broken code. Each test's result is handed to `Report`, which tracks the worst return code across all tests and uses it as the process exit code.
+
+### core/config.py — Project configuration
+
+Defines `ProjectConfig`, a flat dataclass that holds all settings for one test target. `load_config(path)` reads the JSON file, maps each section (`benchmark`, `screenshot`, `shader_compile`, `build`, `sanitizer`, `memleak`) into the corresponding fields, then calls `resolve_paths` to convert any relative paths to absolute paths based on the config file's location. This means config files are portable — you can move the `projects/` folder without breaking paths.
+
+### core/runner.py — Process lifecycle
+
+`launch(exe_path, args, working_dir, timeout, env)` is the single function that every test module calls to run the target application. It wraps `subprocess.Popen`, captures stdout and stderr, enforces a timeout, and on exit translates Windows NT exception codes (like `0xC0000005` ACCESS\_VIOLATION or `0xC00000FD` STACK\_OVERFLOW) into readable crash reasons. Without this translation, a graphics app crash returns a negative integer that is meaningless without knowing Windows NT status codes.
+
+### core/report.py — Result collection
+
+`Report` accumulates `TestResult` objects from each test module and produces two outputs: a formatted console table via `print_summary()` and an optional JSON file via `save_json()`. The `worst_code` property returns the highest return code seen across all results — `0x00` if everything passed, `0x02` for warnings, `0xFF` for any failure. This single value becomes the process exit code, which is what CI checks.
+
+### core/stats.py — Performance time series analysis
+
+Used by the benchmark test after 5 or more historical runs accumulate. Takes a list of FPS values over time and runs four analyses using Python stdlib only (no numpy or scipy):
+
+| Function | What it does |
+|----------|-------------|
+| `compute_summary` | Mean, median, stdev, CV, p5/p95, min/max |
+| `detect_outliers_zscore` | Flags points beyond N standard deviations |
+| `detect_outliers_iqr` | IQR fence method, more robust to skewed distributions |
+| `detect_trend` | OLS linear regression slope + recent-window vs overall-mean comparison |
+| `detect_changepoints` | Sliding-window Welch's t-test to find sudden performance shifts |
+| `analyze_series` | Runs all of the above and returns a `SeriesAnalysis` bundle |
+
+The changepoint detector is the most useful for CI: it catches a sudden 10% regression introduced by a specific commit, which a simple baseline comparison might miss if the baseline was set long ago.
+
+### tests/build\_test.py — MSBuild
+
+Locates `MSBuild.exe` via `vswhere.exe` (the standard VS installation query tool), then invokes it on the configured `.sln` file. Parses stdout to count errors and warnings. Any error is a critical failure; warnings are reported but do not block subsequent tests when run in isolation.
+
+### tests/benchmark\_test.py — FPS regression
+
+Launches the application three times with `--benchmark <frames>` and reads the JSON result file it produces. Uses the median of the three runs as the comparison value — this filters noise from background system load. Compares against a stored baseline using configurable per-metric thresholds (`avg_fps_pct`, `p1_fps_pct`, `p5_fps_pct`, `min_fps_pct`). Appends each run to a history file; once 5+ entries exist, runs `stats.analyze_series` for trend and changepoint detection.
+
+### tests/screenshot\_test.py — Image regression
+
+Launches the application, then compares each output screenshot against a stored reference using PSNR as the primary metric (default threshold: 70 dB). A 16-pixel safety valve forces a pass if fewer than 16 pixels differ — this handles floating-point rendering jitter that varies across driver versions without failing CI. Diff images are saved alongside the outputs for visual inspection. `scikit-image` is lazy-imported so non-screenshot runs pay no import cost.
+
+### tests/shader\_compile\_test.py — HLSL batch compilation
+
+Scans configured directories for `.hlsl` files and compiles each with `dxc.exe`. Entry points are auto-detected by scanning the source for `[numthreads]` (compute), `SV_Position` (vertex), `SV_Target` / `SV_Depth` (pixel/depth), and struct return types containing these semantics. Files with multiple entry points (e.g. a VS + PS in one file) are compiled separately for each. If detection fails, common fallback names (`VertexMain`, `PixelMain`, `CSMain`, etc.) are tried before reporting a warning.
+
+### tests/memleak\_test.py — Memory leak detection
+
+Launches the application and checks for leaks through two channels: parsing `.memleaks` files (The-Forge convention, contains leak count and details) and scanning stdout/stderr for MSVC CRT debug output (`_CrtDumpMemoryLeaks`). Any leak found is a critical failure.
+
+### tests/sanitizer\_test.py — ASAN / UBSAN
+
+Runs a separately compiled instrumented build and parses its output for sanitizer errors. Automatically sets `ASAN_OPTIONS` and `UBSAN_OPTIONS` environment variables to enable verbose stack traces. Recognizes AddressSanitizer patterns (heap-buffer-overflow, use-after-free, double-free) and UndefinedBehaviorSanitizer patterns (integer overflow, null pointer dereference, misaligned access). Requires a build compiled with `/fsanitize=address` (MSVC) or `-fsanitize=address,undefined` (clang-cl).
 
 ### Why it works this way
 
