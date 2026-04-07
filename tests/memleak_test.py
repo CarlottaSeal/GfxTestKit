@@ -70,6 +70,9 @@ def _parse_crt_leaks(output: str) -> tuple[int, list[str]]:
 def run(cfg: ProjectConfig, update_baseline: bool = False) -> TestResult:
     """
     Run the application and check for memory leaks.
+
+    Note: update_baseline is unused — memleak has no baseline concept.
+    The parameter exists so every module shares the same run() signature.
     Launches a Debug build (which has CRT leak detection enabled) or
     checks for .memleaks file output.
     """

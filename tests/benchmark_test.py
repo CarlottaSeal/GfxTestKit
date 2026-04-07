@@ -225,7 +225,7 @@ def run(cfg: ProjectConfig, update_baseline: bool = False) -> TestResult:
                 status = "REGRESS"
                 ret_code = max(ret_code, RET_CRITICAL)
                 regression_msgs.append(f"{metric_name}: {delta_pct:+.1f}%")
-            elif delta_pct < -(threshold * 0.5):
+            elif delta_pct < -(threshold * 0.5):  # WARN at half threshold — early signal before hard regression
                 status = "WARN"
                 ret_code = max(ret_code, RET_WARNING)
             else:
