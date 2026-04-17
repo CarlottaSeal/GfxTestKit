@@ -1,16 +1,7 @@
 """
-screenshot_test.py - Screenshot regression testing via PSNR/SSIM.
-
-Modeled after The-Forge's TestScreenshots():
-  - Reference-image-driven traversal (ensures no missing screenshots slip through)
-  - PSNR as primary metric with configurable threshold (default 70 dB)
-  - Pixel-count safety valve (<16 differing pixels = forced pass)
-  - Diff image saved for visual inspection
-  - scikit-image imported lazily (avoid import overhead when test is disabled)
-
-Usage:
-  Requires the target application to capture screenshots into a known directory.
-  Reference images must be pre-captured and stored in the baseline directory.
+PSNR/SSIM screenshot comparison with two-gate pass logic:
+gate 1 = PSNR >= threshold, gate 2 = fewer than 16 diff pixels (FP jitter).
+scikit-image is lazy-imported so benchmark-only runs skip the ~50 MB load.
 """
 
 import time

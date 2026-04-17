@@ -1,10 +1,6 @@
 """
-shader_compile_test.py - HLSL shader compilation validation.
-
-Scans directories for .hlsl files and compiles each with dxc.exe (or fxc.exe).
-Detects compilation errors and tracks warning count regression.
-
-Inspired by The-Forge's PyBuildShaders.py and FSL analysis pipeline.
+Finds all .hlsl files, auto-detects entry points from source (numthreads / SV_Position / SV_Target),
+compiles each with dxc. Falls back to common names like VSMain/PSMain if detection misses.
 """
 
 import subprocess

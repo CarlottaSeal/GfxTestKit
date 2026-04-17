@@ -1,9 +1,4 @@
-"""
-stats.py - Statistical analysis for performance time series.
-
-Outlier detection, trend analysis, and changepoint detection for
-tracking performance metrics across CI runs. stdlib only (no numpy).
-"""
+"""Z-score, IQR, OLS trend, Welch changepoint — all stdlib, no numpy."""
 
 from dataclasses import dataclass, field
 from math import sqrt

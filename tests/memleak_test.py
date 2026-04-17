@@ -1,13 +1,4 @@
-"""
-memleak_test.py - Memory leak detection.
-
-Parses memory leak reports from the application's output or log files.
-Supports two modes:
-  1. Parse a .memleaks file (The-Forge convention)
-  2. Scan stdout/stderr for CRT debug leak reports (MSVC _CrtDumpMemoryLeaks)
-
-Any leak detected = critical failure (0xFF), same as The-Forge's FindMemoryLeaks().
-"""
+"""Checks for leaks in two places: .memleaks file and MSVC CRT output. Any leak = 0xFF."""
 
 import re
 import time

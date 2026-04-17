@@ -1,20 +1,9 @@
 """
-gfx_test.py - GfxTestKit: General-purpose graphics application test runner.
+Entry point.  Reads a project JSON, runs whichever tests are enabled,
+prints the report, exits with the worst return code.
 
-A config-driven test orchestrator for graphics applications.
-Supports: performance benchmarking, screenshot regression (PSNR/SSIM),
-and HLSL shader compilation validation.
-
-Usage:
     python gfx_test.py --project projects/luminagi.json
-    python gfx_test.py --project projects/luminagi.json --update-baseline
     python gfx_test.py --project projects/luminagi.json --test benchmark
-    python gfx_test.py --project projects/luminagi.json --test shader_compile
-
-Return codes:
-    0x00  All tests passed
-    0x02  Warnings (minor differences)
-    0xFF  Critical failure (crash, regression, compile error)
 """
 
 import argparse

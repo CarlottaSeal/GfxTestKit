@@ -1,11 +1,4 @@
-"""
-report.py - Test result aggregation and severity-graded reporting.
-
-Return code convention (matches The-Forge PyBuild.py):
-  0x00 = all clear
-  0x02 = warnings (minor screenshot diff, small perf change)
-  0xFF = critical (crash, major regression, compilation failure)
-"""
+"""Collects test results, prints a summary table, optionally writes JSON."""
 
 import json
 import time

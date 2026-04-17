@@ -1,11 +1,4 @@
-"""
-build_test.py - Build automation via MSBuild.
-
-Compiles the target project before running other tests.
-Reports build errors and warnings.
-
-Inspired by The-Forge's PyBuild.py BuildWindowsProjects().
-"""
+"""Compiles the .sln via MSBuild (found through vswhere). Fails fast so later tests don't run against a broken binary."""
 
 import subprocess
 import time

@@ -1,17 +1,7 @@
 """
-sanitizer_test.py - Sanitizer integration (ASAN/UBSAN).
-
-Launches the application with sanitizer-enabled build and parses
-the output for sanitizer reports. Supports:
-  - AddressSanitizer (ASAN): buffer overflow, use-after-free, memory leaks
-  - UndefinedBehaviorSanitizer (UBSAN): integer overflow, null dereference, alignment
-
-Inspired by The-Forge's PyBuild.py sanitizer integration, which injects
--fsanitize= flags into .vcxproj and checks for runtime errors.
-
-Note: Requires a separate build with sanitizer flags enabled.
-MSVC: /fsanitize=address (ASAN only, no UBSAN on MSVC)
-Clang-cl: -fsanitize=address,undefined
+Runs the ASAN/UBSAN-instrumented exe, regex-matches stderr for
+heap-buffer-overflow, use-after-free, integer overflow, etc.
+Needs a separate build compiled with /fsanitize=address.
 """
 
 import re

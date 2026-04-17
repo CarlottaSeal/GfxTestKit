@@ -1,12 +1,4 @@
-"""
-benchmark_test.py - Performance regression detection.
-
-Launches the target application in benchmark mode, parses the FPS metrics JSON,
-and compares against a stored baseline. Reports regressions using configurable
-per-metric percentage thresholds.
-
-Inspired by The-Forge's FSL analysis baseline comparison system.
-"""
+"""Runs the app 3x, takes the median, compares FPS percentiles against a baseline JSON."""
 
 import json
 import time

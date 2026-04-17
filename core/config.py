@@ -1,9 +1,4 @@
-"""
-config.py - Load and validate JSON project configuration.
-
-A project config defines the test target and what tests to run.
-See projects/luminagi.json for an example.
-"""
+"""Loads a project JSON (like luminagi.json) into a typed config object."""
 
 import json
 from dataclasses import dataclass, field

@@ -1,10 +1,4 @@
-"""
-runner.py - Process lifecycle management for graphics applications.
-
-Launches a target executable, monitors for crashes and timeouts,
-and captures exit codes. Handles Windows-specific crash codes
-(access violation, stack overflow, etc.).
-"""
+"""Launches the target exe, kills it on timeout, maps Windows crash codes."""
 
 import subprocess
 import sys
